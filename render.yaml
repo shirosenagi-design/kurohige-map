@@ -68,11 +68,20 @@ services:
       - key: REVIEW_ADMIN_TOKEN
         sync: false
       - key: AUTH_PUBLIC_BASE_URL
-        sync: false
+        fromService:
+          name: kurohige-live-filming
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
       - key: WEBAUTHN_RP_ID
-        sync: false
+        fromService:
+          name: kurohige-live-filming
+          type: web
+          envVarKey: RENDER_EXTERNAL_HOSTNAME
       - key: WEBAUTHN_ORIGIN
-        sync: false
+        fromService:
+          name: kurohige-live-filming
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
 
   - type: web
     name: kurohige-live-reviewer
@@ -120,11 +129,20 @@ services:
       - key: REVIEW_ADMIN_TOKEN
         sync: false
       - key: AUTH_PUBLIC_BASE_URL
-        sync: false
+        fromService:
+          name: kurohige-live-reviewer
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
       - key: WEBAUTHN_RP_ID
-        sync: false
+        fromService:
+          name: kurohige-live-reviewer
+          type: web
+          envVarKey: RENDER_EXTERNAL_HOSTNAME
       - key: WEBAUTHN_ORIGIN
-        sync: false
+        fromService:
+          name: kurohige-live-reviewer
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
 
 databases:
   - name: kurohige-product-data
