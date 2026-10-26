@@ -82,12 +82,13 @@ test('live paid route rejects unauthenticated requests and accepts correct Basic
 
 test('production Vite preview serves the anonymous sample through the loopback gateway', async () => {
   const keys = ['NEBIUS_API_ENABLED', 'KUROHIGE_PUBLIC_SAMPLE_ONLY', 'KUROHIGE_LIVE_AI_TRUSTED_PROXY_SECRET',
-    'REVIEW_STORAGE_BACKEND', 'REVIEW_DATA_PATH'];
+    'REVIEW_STORAGE_BACKEND', 'REVIEW_DATA_PATH', 'RENDER_EXTERNAL_HOSTNAME'];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const secret = 'internal-secret-of-at-least-thirty-two-characters';
   Object.assign(process.env, {
     NEBIUS_API_ENABLED: 'false', KUROHIGE_PUBLIC_SAMPLE_ONLY: 'true',
     KUROHIGE_LIVE_AI_TRUSTED_PROXY_SECRET: secret, REVIEW_STORAGE_BACKEND: 'json',
+    RENDER_EXTERNAL_HOSTNAME: 'kurohige-public-sample.onrender.com',
     REVIEW_DATA_PATH: path.join(os.tmpdir(), `kurohige-render-smoke-${randomUUID()}.json`),
   });
   let previewServer;
@@ -101,10 +102,13 @@ test('production Vite preview serves the anonymous sample through the loopback g
     gateway.listen(0, '127.0.0.1');
     await once(gateway, 'listening');
     const gatewayPort = gateway.address().port;
-    const page = await request(gatewayPort, '/?sample=1');
+    const publicHost = { host: 'kurohige-public-sample.onrender.com' };
+    const page = await request(gatewayPort, '/?sample=1', publicHost);
     assert.equal(page.status, 200);
     assert.match(page.body, /<html/iu);
-    const blocked = await request(gatewayPort, '/api/world-expand', {}, 'POST');
+    assert.equal((await request(gatewayPort, '/', { host: 'kurohige-live-filming.onrender.com' })).status, 403);
+    assert.equal((await request(gatewayPort, '/', { host: 'unexpected.onrender.com' })).status, 403);
+    const blocked = await request(gatewayPort, '/api/world-expand', publicHost, 'POST');
     assert.equal(blocked.status, 503);
     assert.equal(JSON.parse(blocked.body).error.code, 'PUBLIC_SAMPLE_SERVER_API_BLOCKED');
   } finally {

@@ -8,6 +8,12 @@ import { createNebiusProductSpendGuardFromEnv } from './server/nebiusProductSpen
 import { createPublicSampleApiGuard } from './server/publicSampleGuard.mjs';
 import { createLiveAiAccessGate } from './server/liveAiAccessGate.mjs';
 
+const approvedRenderHosts = new Set([
+  'kurohige-public-sample.onrender.com',
+  'kurohige-live-filming.onrender.com',
+  'kurohige-live-reviewer.onrender.com',
+]);
+
 function visualRecipeApiPlugin(apiKey, apiEnabled, diagnosticEnabled, reviewLabEnabled, reviewOptions, reviewPool = null, spendGuard = null, publicSampleOnly = false, liveAiAccessGate = null) {
   const livingFlowApi = createLivingFlowApi({ apiKey, apiEnabled, diagnosticEnabled, spendGuard });
   const reviewLabApi = createReviewLabApi({
@@ -45,6 +51,8 @@ function visualRecipeApiPlugin(apiKey, apiEnabled, diagnosticEnabled, reviewLabE
 
 export default defineConfig(async ({ mode }) => {
   const serverEnv = loadEnv(mode, process.cwd(), '');
+  const renderHost = serverEnv.RENDER_EXTERNAL_HOSTNAME;
+  const allowedHosts = approvedRenderHosts.has(renderHost) ? [renderHost] : [];
   const liveAiAccessGate = createLiveAiAccessGate({
     enabled: serverEnv.NEBIUS_API_ENABLED === 'true',
     username: serverEnv.KUROHIGE_LIVE_AI_USERNAME ?? '',
@@ -71,10 +79,12 @@ export default defineConfig(async ({ mode }) => {
   }
   return {
     server: {
+      allowedHosts,
       watch: {
         ignored: ['**/.tmp/**'],
       },
     },
+    preview: { allowedHosts },
     plugins: [visualRecipeApiPlugin(
       serverEnv.NEBIUS_API_KEY,
       serverEnv.NEBIUS_API_ENABLED,
