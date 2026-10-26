@@ -76,7 +76,7 @@ async function main() {
   let upstreamReady = false;
   const server = createRenderGateway({ upstreamPort, proxySecret, ready: () => upstreamReady && child.exitCode === null });
   let child = spawn(process.execPath, [
-    '--use-system-ca', './node_modules/vite/bin/vite.js', 'preview', '--configLoader', 'runner',
+    '--use-system-ca', './node_modules/vite/bin/vite.js', 'preview', '--configLoader', 'native',
     '--host', upstreamHost, '--port', String(upstreamPort), '--strictPort',
   ], { stdio: 'inherit', env: { ...process.env, NODE_ENV: 'production' } });
   const probe = setInterval(() => {

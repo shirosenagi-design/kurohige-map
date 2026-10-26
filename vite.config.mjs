@@ -49,7 +49,8 @@ function visualRecipeApiPlugin(apiKey, apiEnabled, diagnosticEnabled, reviewLabE
   };
 }
 
-export default defineConfig(async ({ mode }) => {
+export default defineConfig(async ({ command, mode }) => {
+  const isBuild = command === 'build';
   const serverEnv = loadEnv(mode, process.cwd(), '');
   const renderHost = serverEnv.RENDER_EXTERNAL_HOSTNAME;
   const allowedHosts = approvedRenderHosts.has(renderHost) ? [renderHost] : [];
@@ -60,13 +61,13 @@ export default defineConfig(async ({ mode }) => {
     productionMode: mode === 'production',
     trustedProxySecret: serverEnv.KUROHIGE_LIVE_AI_TRUSTED_PROXY_SECRET ?? '',
   });
-  const productSpendGuard = await createNebiusProductSpendGuardFromEnv(serverEnv);
+  const productSpendGuard = isBuild ? null : await createNebiusProductSpendGuardFromEnv(serverEnv);
   const publicSampleOnly = serverEnv.KUROHIGE_PUBLIC_SAMPLE_ONLY === 'true';
   const reviewBackend = serverEnv.REVIEW_STORAGE_BACKEND || 'json';
   let reviewPool = null;
   let reviewRepository;
   let syncRepository = null;
-  if (reviewBackend === 'postgres') {
+  if (reviewBackend === 'postgres' && !isBuild) {
     reviewPool = await createPostgresPool(serverEnv.REVIEW_DATABASE_URL, {
       ssl: serverEnv.REVIEW_DATABASE_SSL === 'true',
       applicationName: 'kurohige-review-vite',
@@ -74,7 +75,7 @@ export default defineConfig(async ({ mode }) => {
     await assertPostgresReviewSchema(reviewPool);
     reviewRepository = createPostgresReviewRepository(reviewPool);
     syncRepository = createPostgresAccountSyncRepository(reviewPool);
-  } else if (reviewBackend !== 'json') {
+  } else if (reviewBackend !== 'json' && reviewBackend !== 'postgres') {
     throw new Error(`Unsupported REVIEW_STORAGE_BACKEND: ${reviewBackend}`);
   }
   return {
@@ -85,7 +86,7 @@ export default defineConfig(async ({ mode }) => {
       },
     },
     preview: { allowedHosts },
-    plugins: [visualRecipeApiPlugin(
+    plugins: isBuild ? [] : [visualRecipeApiPlugin(
       serverEnv.NEBIUS_API_KEY,
       serverEnv.NEBIUS_API_ENABLED,
       mode !== 'production',
