@@ -1025,8 +1025,8 @@ export function LivingMap({
 
   return <>
     <div ref={hostRef} className="living-map" aria-label="Possibility Map canvas" />
-    <button className={`current-location ${returnVisible ? 'visible' : ''}`} type="button" onClick={() => returnToShipRef.current()} aria-hidden={!returnVisible} tabIndex={returnVisible ? 0 : -1}>
-      <span aria-hidden="true">笵ｵ</span><span>迴ｾ蝨ｨ蝨ｰ</span>
+    <button className={`current-location ${returnVisible ? 'visible' : ''}`} type="button" aria-label="現在地" onClick={() => returnToShipRef.current()} aria-hidden={!returnVisible} tabIndex={returnVisible ? 0 : -1}>
+      <span aria-hidden="true">◎</span><span>現在地</span>
     </button>
   </>;
 }

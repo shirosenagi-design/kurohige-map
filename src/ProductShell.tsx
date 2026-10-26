@@ -110,7 +110,7 @@ export function ProductShell({ devOffline = false, sampleMode = false, worldRepo
     </header>}
 
     {sampleMode && <aside className="sample-mode-badge" role="status">
-      <strong>サンプル体験</strong><span>AIリアルタイム生成なし · 本番データ送信なし</span>
+      <strong>サンプル体験</strong><span className="sample-mode-badge-full">AIリアルタイム生成なし · 本番データ送信なし</span><span className="sample-mode-badge-compact">AI生成なし</span>
     </aside>}
 
     {coverEntered && !sampleMode && state.section === 'summary' && <SummaryScreen

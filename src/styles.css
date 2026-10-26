@@ -305,7 +305,8 @@ button { font: inherit; }
 .living-distance-table > div { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 6px 7px; border-radius: 7px; background: #123e50d9; font-size: 9px; }
 .living-distance-table strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .living-distance-table small { grid-column: 1 / -1; color: #91d6cf; }
-.living-selected-card { z-index: 6; }
+.living-selected-card { position: relative; z-index: 6; }
+.living-selected-card > .card-heading { margin-right: 36px; }
 @media (min-width: 700px) { .ui-overlay { padding-top: 28px; padding-bottom: 28px; } .brand { font-size: 21px; } .bottom-ui { align-self: flex-end; } }
 @media (max-width: 999px) and (min-width: 700px) { .nemotron-panel, .recipe-debug-panel { width: calc(50% - 27px); } }
 @media (max-width: 699px) { .current-location { left: 50%; bottom: 210px; transform: translate(-50%, 6px); } .current-location.visible { transform: translate(-50%, 0); } .nemotron-panel { top: 136px; } .nemotron-result pre { max-height: 110px; } .recipe-debug-panel { top: 258px; left: 18px; right: 18px; max-height: 220px; } }

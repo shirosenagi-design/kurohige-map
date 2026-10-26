@@ -980,6 +980,7 @@ export function LivingFlowPilot({
       </div>}
     </header>
       {productSection === 'map' && selected && selectedState && <section className="bottom-ui living-selected-card" aria-label="Selected possibility node">
+        {productView && <button className="living-steps-close" type="button" aria-label={t('map.closeSelected')} onClick={() => setSelectedId('')}>×</button>}
         <div className="card-heading"><span className="category">{selected.category}</span><span className="preview-caption">{productView ? `${kindLabel[selected.nodeKind]} · ${relationLabel[selected.relationToGoal]}${selectedState.activePursuit ? ` · ${t('map.active')}` : ''}${selectedState.landed ? ` · ${t('map.landed')}` : ''}` : `${selected.nodeKind} · ${selected.relationToGoal}${selectedState.activePursuit ? ' · ACTIVE' : ''}${selectedState.landed ? ' · LANDED' : ''}`}</span></div>
         <h1>{selected.title}</h1><p>{selected.shortDescription}</p><div className="actions">
           <button type="button" onClick={peekSelected}>{t('map.peek')}</button>
