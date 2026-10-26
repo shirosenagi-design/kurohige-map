@@ -1,0 +1,82 @@
+# Configuration only. Creating/syncing this Blueprint provisions paid resources.
+# Live AI remains OFF until separate approval, credentials, and guard configuration.
+services:
+  - type: web
+    name: kurohige-public-sample
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: node server/renderGateway.mjs
+    autoDeployTrigger: 'off'
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: '24.19.0'
+      - key: NODE_ENV
+        value: production
+      - key: NEBIUS_API_ENABLED
+        value: 'false'
+      - key: KUROHIGE_PUBLIC_SAMPLE_ONLY
+        value: 'true'
+      - key: KUROHIGE_LIVE_AI_TRUSTED_PROXY_SECRET
+        generateValue: true
+
+  - type: web
+    name: kurohige-live
+    runtime: node
+    region: singapore
+    plan: 0.5c-512mb
+    buildCommand: npm ci --include=dev && npm run build
+    preDeployCommand: node scripts/renderApplySchema.mjs --apply
+    startCommand: node server/renderGateway.mjs
+    autoDeployTrigger: 'off'
+    healthCheckPath: /health
+    disk:
+      name: live-guard-ledgers
+      mountPath: /var/data/kurohige
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: '24.19.0'
+      - key: NODE_ENV
+        value: production
+      - key: NEBIUS_API_ENABLED
+        value: 'false'
+      - key: KUROHIGE_PUBLIC_SAMPLE_ONLY
+        value: 'false'
+      - key: KUROHIGE_LIVE_SESSION
+        value: disabled
+      - key: NEBIUS_PRODUCT_GUARD_CONFIG_PATH
+        value: /etc/secrets/approved-product-guard.json
+      - key: KUROHIGE_LIVE_AI_TRUSTED_PROXY_SECRET
+        generateValue: true
+      - key: KUROHIGE_LIVE_AI_USERNAME
+        sync: false
+      - key: KUROHIGE_LIVE_AI_PASSWORD
+        sync: false
+      - key: REVIEW_STORAGE_BACKEND
+        value: postgres
+      - key: REVIEW_DATABASE_URL
+        fromDatabase:
+          name: kurohige-product-data
+          property: connectionString
+      - key: REVIEW_DATABASE_SSL
+        value: 'false'
+      - key: REVIEW_SESSION_SECRET
+        generateValue: true
+      - key: REVIEW_ADMIN_TOKEN
+        sync: false
+      - key: AUTH_PUBLIC_BASE_URL
+        sync: false
+      - key: WEBAUTHN_RP_ID
+        sync: false
+      - key: WEBAUTHN_ORIGIN
+        sync: false
+
+databases:
+  - name: kurohige-product-data
+    region: singapore
+    plan: 0.1c-256mb
+    diskSizeGB: 1
+    ipAllowList: []

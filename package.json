@@ -1,0 +1,34 @@
+{
+  "name": "kurohige-map",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "node --use-system-ca ./node_modules/vite/bin/vite.js --configLoader runner --host 127.0.0.1",
+    "build": "tsc -b && vite build --configLoader runner",
+    "preview": "node --use-system-ca ./node_modules/vite/bin/vite.js preview --configLoader runner --host 127.0.0.1",
+    "test": "node --experimental-strip-types --test tests/productState.test.ts tests/worldPersistence.test.ts tests/worldGeneration.test.ts tests/worldGenerationE2E.test.mjs tests/shipNavigation.test.ts tests/accountSyncContract.test.ts tests/syncOutbox.test.ts tests/accountSyncRecovery.test.ts tests/accountSyncRepository.test.mjs tests/accountSyncHttp.test.mjs tests/cover.test.ts tests/nebiusPause.test.mjs tests/nebiusLiveSpendGuard.test.mjs tests/nebiusProductSpendGuard.test.mjs tests/reviewLab.test.mjs tests/reviewPostgres.test.mjs tests/devOffline.test.ts tests/sampleMode.test.ts tests/voyageLog.test.ts",
+    "review:db:dry-run": "node server/postgres/reviewMigration.mjs --source=data/review-lab/reviews.json",
+    "review:db:migrate": "node server/postgres/reviewMigration.mjs --source=data/review-lab/reviews.json --apply",
+    "test:review:postgres": "node --test tests/reviewPostgres.integration.mjs",
+    "test:sync:postgres": "node --test tests/accountSyncPostgres.integration.mjs",
+    "test:sync:repository:postgres": "node --test tests/accountSyncRepository.integration.mjs",
+    "test:sync:http:postgres": "node --test tests/accountSyncHttp.integration.mjs",
+    "test:sync:outbox:postgres": "node --experimental-strip-types --test tests/syncOutboxHttp.integration.mjs",
+    "test:nebius:initial-six": "node --use-system-ca scripts/nebiusInitialSixE2E.mjs"
+  },
+  "dependencies": {
+    "@simplewebauthn/browser": "14.0.0",
+    "@simplewebauthn/server": "14.0.3",
+    "pg": "^8.23.1",
+    "pixi.js": "^8.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^7.0.0"
+  }
+}

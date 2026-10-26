@@ -1,0 +1,22 @@
+.dev-offline-root { min-height: 100%; }
+.dev-offline-badge {
+  position: fixed; z-index: 10000; top: 76px; left: 14px; display: grid; gap: 1px;
+  padding: 8px 12px; border: 1px solid rgba(255,255,255,.82); border-radius: 12px;
+  color: #fff; background: rgba(9, 67, 89, .9); box-shadow: 0 5px 18px rgba(0,31,47,.24);
+  pointer-events: none; font-size: 12px; letter-spacing: .02em;
+}
+.dev-offline-badge strong { font-size: 13px; }
+.dev-offline-badge span { opacity: .84; }
+.dev-offline-setup {
+  min-height: 100vh; display: grid; place-items: center; padding: 32px;
+  background: linear-gradient(180deg, #79d8f4, #e7fbff);
+}
+.dev-offline-setup section {
+  width: min(560px, 100%); padding: 32px; border-radius: 24px; color: #123f51;
+  background: rgba(255,255,255,.94); box-shadow: 0 18px 60px rgba(13,76,99,.2);
+}
+.dev-offline-setup h1 { margin: 4px 0 12px; }
+.dev-offline-setup ul { padding-left: 1.25rem; line-height: 1.8; }
+.dev-offline-setup button { margin-top: 12px; padding: 12px 18px; border: 0; border-radius: 999px; color: #fff; background: #087ea4; font-weight: 700; cursor: pointer; }
+.dev-offline-setup button:disabled { opacity: .55; cursor: wait; }
+.dev-offline-eyebrow { margin: 0; color: #147999; font-size: 12px; font-weight: 800; letter-spacing: .12em; }
