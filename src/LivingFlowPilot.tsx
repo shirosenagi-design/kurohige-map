@@ -26,6 +26,7 @@ import {
 } from './worldCapacity';
 import { appendDistinctPossibilityNodes, prepareAdditiveWorldExpansion } from './worldExpansion';
 import { createIndexedDbWorldRepository, type WorldRepository } from './worldRepository';
+import { requestPersonContextExpansion } from './personContextExpansionRequest';
 import { createSampleNodeDetail, createSampleSmallSteps, sampleNodesForBand } from './sampleMode';
 import { notifyWorldPersisted } from './localPersistenceSignals';
 import {
@@ -167,8 +168,14 @@ export function LivingFlowPilot({
   onInitialWorldGenerationChangeRef.current = onInitialWorldGenerationChange;
   const handledInitialWorldRequestRef = useRef(0);
   const handledContextExpansionRequestRef = useRef(0);
+  const mountedRef = useRef(false);
   const reviewEligibilityQueueRef = useRef<Promise<void>>(Promise.resolve());
   const reviewSessionReadyRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const commitNodeStates = (updater: Record<string, PossibilityNodeState> | ((current: Record<string, PossibilityNodeState>) => Record<string, PossibilityNodeState>)) => {
     const next = typeof updater === 'function' ? updater(nodeStatesRef.current) : updater;
@@ -457,7 +464,7 @@ export function LivingFlowPilot({
       return;
     }
 
-    let disposed = false;
+    const requestId = initialWorldGenerationRequestId;
     const integratePersonContext = async () => {
       loadingExpansionRef.current = true;
       setLoadingExpansion(true);
@@ -473,20 +480,16 @@ export function LivingFlowPilot({
           initialWorldGenerationCommand.locale,
           parentGoal || null,
         );
-        const response = await fetch('/api/world-expand', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            generationContext,
-            explorationBand: band,
-            expansionReason: 'person_context',
-            existingNodes: currentNodes.map(({ id, title, shortDescription, category, nodeKind, relationToGoal, portableResourceTags, connectionTags, helpedByTags }) => ({
-              id, title, shortDescription, category, nodeKind, relationToGoal, portableResourceTags, connectionTags, helpedByTags,
-            })),
-            keptNodeIds: currentNodes.filter((node) => currentStates[node.id]?.kept).map((node) => node.id),
-            landedNodeIds: currentNodes.filter((node) => currentStates[node.id]?.landed).map((node) => node.id),
-          }),
+        const { response, payload } = await requestPersonContextExpansion<PossibilityMapResponse>({
+          generationContext,
+          explorationBand: band,
+          expansionReason: 'person_context',
+          existingNodes: currentNodes.map(({ id, title, shortDescription, category, nodeKind, relationToGoal, portableResourceTags, connectionTags, helpedByTags }) => ({
+            id, title, shortDescription, category, nodeKind, relationToGoal, portableResourceTags, connectionTags, helpedByTags,
+          })),
+          keptNodeIds: currentNodes.filter((node) => currentStates[node.id]?.kept).map((node) => node.id),
+          landedNodeIds: currentNodes.filter((node) => currentStates[node.id]?.landed).map((node) => node.id),
         });
-        const payload = await response.json() as PossibilityMapResponse;
         if (!response.ok || !payload.nodes || payload.nodes.length !== WORLD_EXPANSION_BATCH_SIZE) {
           throw new Error(payload.error?.message ?? `${t('error.worldExpansion')} (${response.status})`);
         }
@@ -502,7 +505,7 @@ export function LivingFlowPilot({
         const { appended, nodes: allNodes, nodeStates: nextStates, explorationBands: bands } = prepared;
         if (appended.length !== WORLD_EXPANSION_BATCH_SIZE) throw new Error(t('error.duplicateWorld'));
         const nextPlacement = computeSemanticLayout(allNodes, personStateRef.current, tiersFromStates(nextStates), bands);
-        if (disposed) return;
+        if (!mountedRef.current || handledContextExpansionRequestRef.current !== requestId) return;
 
         worldIntegratedContextRevisionRef.current = requestedRevision;
         nodesRef.current = allNodes;
@@ -527,17 +530,18 @@ export function LivingFlowPilot({
         setMapRevision((current) => current + 1);
         onInitialWorldGenerationChangeRef.current?.({ status: 'success' });
       } catch (caught) {
-        if (disposed) return;
-        const message = caught instanceof Error ? caught.message : t('error.worldExpansion');
+        if (!mountedRef.current || handledContextExpansionRequestRef.current !== requestId) return;
+        const message = caught instanceof DOMException && caught.name === 'TimeoutError'
+          ? t('error.worldExpansionTimeout')
+          : caught instanceof Error ? caught.message : t('error.worldExpansion');
         setExpansionError(message);
         onInitialWorldGenerationChangeRef.current?.({ status: 'error', error: message });
       } finally {
         loadingExpansionRef.current = false;
-        if (!disposed) setLoadingExpansion(false);
+        if (mountedRef.current) setLoadingExpansion(false);
       }
     };
     void integratePersonContext();
-    return () => { disposed = true; };
   }, [productView, devOffline, sampleMode, initialWorldGenerationRequestId, initialWorldGenerationCommand, worldHydrationStatus, loadingExpansion, canonicalProductState.userProfile, parentGoal]);
 
   useEffect(() => {
