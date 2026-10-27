@@ -429,13 +429,82 @@ test('parallel Product sends are rejected while the reserved request remains the
   assert.equal((await guard.snapshot()).chatPostsCompleted, 1);
 });
 
-test('existing Product ledger blocks a second process after restart and preserves prior accounting', async () => {
+test('clean restart resumes the same approval without resetting prior accounting', async () => {
   const { config, guard } = await productFixture();
   await guardedFor(guard, 'node_detail', async () => response(successPayload()))(CHAT_URL, chatInit('node_detail'));
   const restarted = createNebiusProductSpendGuard(config);
-  await assert.rejects(restarted.initialize(), (error) => error.code === 'NEBIUS_PRODUCT_RUN_REUSE_BLOCKED');
+  await restarted.initialize();
   const records = (await readFile(config.ledgerPath, 'utf8')).trim().split(/\r?\n/u).map(JSON.parse);
   assert.equal(records.at(-1).chatPostsCompleted, 1);
+  await assert.rejects(guardedFor(guard, 'node_detail', async () => response(successPayload()))(CHAT_URL, chatInit('node_detail')),
+    (error) => error.code === 'NEBIUS_PRODUCT_RUN_REUSE_BLOCKED');
+  await guardedFor(restarted, 'node_detail', async () => response(successPayload()))(CHAT_URL, chatInit('node_detail'));
+  assert.equal((await restarted.snapshot()).chatPostsCompleted, 2);
+});
+
+test('restart refuses changed approval, legacy ledger and unfinished requests', async () => {
+  const changed = await productFixture();
+  await assert.rejects(createNebiusProductSpendGuard({ ...changed.config, maxTotalEstimatedUsd: 2 }).initialize(),
+    (error) => error.code === 'NEBIUS_PRODUCT_RUN_REUSE_BLOCKED');
+  const legacy = await productFixture();
+  const legacyState = JSON.parse((await readFile(legacy.config.ledgerPath, 'utf8')).trim().split(/\r?\n/u).at(-1));
+  delete legacyState.approvalFingerprint;
+  await writeFile(legacy.config.ledgerPath, `${JSON.stringify(legacyState)}\n`, 'utf8');
+  await assert.rejects(createNebiusProductSpendGuard(legacy.config).initialize(),
+    (error) => error.code === 'NEBIUS_PRODUCT_RUN_REUSE_BLOCKED');
+  const unfinished = await productFixture();
+  const pending = JSON.parse((await readFile(unfinished.config.ledgerPath, 'utf8')).trim().split(/\r?\n/u).at(-1));
+  pending.inFlight = { reservationId: 'unfinished-test' };
+  await writeFile(unfinished.config.ledgerPath, `${JSON.stringify(pending)}\n`, 'utf8');
+  await assert.rejects(createNebiusProductSpendGuard(unfinished.config).initialize(),
+    (error) => error.code === 'NEBIUS_PRODUCT_RUN_REUSE_BLOCKED');
+});
+
+test('same guard initializes once even when two callers start concurrently', async () => {
+  const { config, guard } = await productFixture();
+  const [first, second] = await Promise.all([guard.initialize(), guard.initialize()]);
+  assert.equal(first.status, 'armed');
+  assert.equal(second.status, 'armed');
+  const records = (await readFile(config.ledgerPath, 'utf8')).trim().split(/\r?\n/u);
+  assert.equal(records.length, 1);
+});
+
+test('an existing lock blocks initialization without removing the lock or creating a ledger', async () => {
+  const { root, config } = await productFixture();
+  const ledgerPath = path.join(root, 'blocked-ledger.jsonl');
+  await writeFile(`${ledgerPath}.lock`, 'existing-lock', 'utf8');
+  const guard = createNebiusProductSpendGuard({ ...config, ledgerPath });
+  await assert.rejects(guard.initialize(), (error) => error.code === 'NEBIUS_PRODUCT_CONCURRENT_RUN_BLOCKED');
+  assert.equal(await readFile(`${ledgerPath}.lock`, 'utf8'), 'existing-lock');
+  await assert.rejects(readFile(ledgerPath, 'utf8'), (error) => error.code === 'ENOENT');
+});
+
+test('filming world approval permits six operations and rejects unrelated work before transport', async () => {
+  const allowed = [
+    'possibility_map_semantic_batch', 'possibility_map_visual_batch',
+    'world_expansion_semantic_batch', 'world_expansion_visual_batch',
+    'node_detail', 'local_small_steps',
+  ];
+  const { guard } = await productFixture({
+    maxTotalChatPosts: 100, maxTotalEstimatedUsd: 6,
+    scopes: {
+      world: { maxChatPosts: 100, maxEstimatedUsd: 6, allowedOperations: allowed },
+      review: { maxChatPosts: 0, maxEstimatedUsd: 0, allowedOperations: [] },
+    },
+  });
+  let mockSends = 0;
+  const mockFetch = async () => { mockSends += 1; return response(successPayload()); };
+  for (const operation of allowed) {
+    assert.equal(guard.allowsOperation(operation), true);
+    await guardedFor(guard, operation, mockFetch)(CHAT_URL, chatInit(operation));
+  }
+  for (const operation of ['visual_recipe', 'semantic_visual_intent', ...REVIEW_OPERATIONS]) {
+    assert.equal(guard.allowsOperation(operation), false);
+    await assert.rejects(guardedFor(guard, operation, mockFetch)(CHAT_URL, chatInit(operation)),
+      (error) => error.code === 'NEBIUS_PRODUCT_OPERATION_BLOCKED');
+  }
+  assert.equal(mockSends, 6);
+  assert.equal((await guard.snapshot()).scopes.review.chatPostsCompleted, 0);
 });
 
 test('environment loader initializes only an explicit valid absolute approval file', async () => {
@@ -466,6 +535,11 @@ test('environment loader initializes only an explicit valid absolute approval fi
     NEBIUS_PRODUCT_GUARD_CONFIG_PATH: configPath,
   });
   assert.equal((await guard.snapshot()).status, 'armed');
+  const duplicate = await createNebiusProductSpendGuardFromEnv({
+    NEBIUS_API_ENABLED: 'true', NEBIUS_API_KEY: 'mock-key', NEBIUS_PRODUCT_GUARD_CONFIG_PATH: configPath,
+  });
+  assert.strictEqual(duplicate, guard);
+  assert.equal((await readFile(config.ledgerPath, 'utf8')).trim().split(/\r?\n/u).length, 1);
 });
 
 test('normal Product server wiring assigns every current AI path to a server-owned guard operation', async () => {

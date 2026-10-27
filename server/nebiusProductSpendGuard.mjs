@@ -1,10 +1,11 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, mkdir, open, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isNebiusApiEnabled, NebiusLiveGuardError } from './nebiusTransportGuard.mjs';
 
 const TOKEN_FACTORY_HOST = 'api.tokenfactory.nebius.com';
 const CONFIG_ENV_NAME = 'NEBIUS_PRODUCT_GUARD_CONFIG_PATH';
+const guardsByConfigPath = new Map();
 const SCOPE_BY_OPERATION = Object.freeze({
   possibility_map_semantic_batch: 'world',
   possibility_map_visual_batch: 'world',
@@ -105,9 +106,11 @@ async function inspectResponse(response) {
 
 export function createNebiusProductSpendGuard(rawConfig, { clock = () => new Date() } = {}) {
   const config = validateConfig(rawConfig);
+  const approvalFingerprint = createHash('sha256').update(JSON.stringify(config)).digest('hex');
   const lockPath = `${config.ledgerPath}.lock`;
   const ownerInstanceId = randomUUID();
   let initialized = false;
+  let initializationPromise = null;
   const nowIso = () => clock().toISOString();
   const nowMs = () => clock().getTime();
 
@@ -158,7 +161,7 @@ export function createNebiusProductSpendGuard(rawConfig, { clock = () => new Dat
     return publicState(state);
   });
 
-  const initialize = async () => {
+  const initializeOnce = async () => {
     await mkdir(path.dirname(config.ledgerPath), { recursive: true });
     const current = nowMs();
     if (current < config.validFromMs || current >= config.validUntilMs) throw new NebiusLiveGuardError('NEBIUS_PRODUCT_APPROVAL_INACTIVE', 'The Product budget approval is outside its approved validity period.');
@@ -169,6 +172,7 @@ export function createNebiusProductSpendGuard(rawConfig, { clock = () => new Dat
         mode: 'product',
         runId: config.runId,
         approvalId: config.approvalId,
+        approvalFingerprint,
         ownerInstanceId,
         status: 'armed',
         createdAt: nowIso(),
@@ -202,12 +206,26 @@ export function createNebiusProductSpendGuard(rawConfig, { clock = () => new Dat
       };
       try { await writeFile(config.ledgerPath, `${JSON.stringify(state)}\n`, { encoding: 'utf8', flag: 'wx' }); }
       catch (error) {
-        if (error?.code === 'EEXIST') throw new NebiusLiveGuardError('NEBIUS_PRODUCT_RUN_REUSE_BLOCKED', 'The Product budget ledger already exists; restart or reuse is blocked until a new explicit approval is configured.');
-        throw error;
+        if (error?.code !== 'EEXIST') throw error;
+        const state = await readState();
+        if (state.approvalFingerprint !== approvalFingerprint
+          || state.runId !== config.runId || state.approvalId !== config.approvalId
+          || !['armed', 'running'].includes(state.status) || state.inFlight
+          || state.chatPostsReserved > config.maxTotalChatPosts
+          || state.estimatedUsdReserved > config.maxTotalEstimatedUsd) {
+          throw new NebiusLiveGuardError('NEBIUS_PRODUCT_RUN_REUSE_BLOCKED', 'The existing Product ledger cannot be safely resumed.');
+        }
+        state.ownerInstanceId = ownerInstanceId;
+        state.updatedAt = nowIso();
+        await appendState(state);
       }
     });
     initialized = true;
     return snapshot();
+  };
+  const initialize = () => {
+    initializationPromise ??= initializeOnce();
+    return initializationPromise;
   };
 
   const snapshot = async () => publicState(await readState());
@@ -366,11 +384,25 @@ export async function createNebiusProductSpendGuardFromEnv(env = process.env, op
   const configPath = String(env[CONFIG_ENV_NAME] ?? '');
   if (!path.isAbsolute(configPath)) throw configError(`${CONFIG_ENV_NAME} must name an absolute approved configuration file.`);
   let raw;
-  try { raw = JSON.parse(await readFile(configPath, 'utf8')); }
+  let configText;
+  try { configText = await readFile(configPath, 'utf8'); raw = JSON.parse(configText); }
   catch (error) { throw configError(`The approved Product guard configuration could not be read: ${error?.code ?? 'invalid_json'}.`); }
-  const guard = createNebiusProductSpendGuard(raw, options);
-  await guard.initialize();
-  return guard;
+  const existing = guardsByConfigPath.get(configPath);
+  if (existing) {
+    if (existing.configText !== configText) throw configError('An approved Product guard configuration changed during this process.');
+    return existing.promise;
+  }
+  const promise = (async () => {
+    const guard = createNebiusProductSpendGuard(raw, options);
+    await guard.initialize();
+    return guard;
+  })();
+  guardsByConfigPath.set(configPath, { configText, promise });
+  try { return await promise; }
+  catch (error) {
+    if (guardsByConfigPath.get(configPath)?.promise === promise) guardsByConfigPath.delete(configPath);
+    throw error;
+  }
 }
 
 export const NEBIUS_PRODUCT_OPERATION_SCOPES = SCOPE_BY_OPERATION;
