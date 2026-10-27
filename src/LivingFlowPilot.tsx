@@ -26,7 +26,7 @@ import {
 } from './worldCapacity';
 import { appendDistinctPossibilityNodes, prepareAdditiveWorldExpansion } from './worldExpansion';
 import { createIndexedDbWorldRepository, type WorldRepository } from './worldRepository';
-import { requestPersonContextExpansion } from './personContextExpansionRequest';
+import { cameraForPersonContextExpansion, requestPersonContextExpansion, savePersonContextExpansion } from './personContextExpansionRequest';
 import { createSampleNodeDetail, createSampleSmallSteps, sampleNodesForBand } from './sampleMode';
 import { notifyWorldPersisted } from './localPersistenceSignals';
 import {
@@ -134,7 +134,7 @@ export function LivingFlowPilot({
   const [loadingSteps, setLoadingSteps] = useState(false);
   const [loadingExpansion, setLoadingExpansion] = useState(false);
   const [expansionError, setExpansionError] = useState('');
-  const [cameraRestore, setCameraRestore] = useState<ExplorationFrontierSnapshot | null>(null);
+  const [cameraRestore, setCameraRestore] = useState<{ x: number; y: number; zoom: number } | null>(null);
   const [error, setError] = useState('');
   const [listFilter, setListFilter] = useState<ListFilter>('kept');
   const [worldHydrationStatus, setWorldHydrationStatus] = useState<WorldHydrationStatus>('hydrating');
@@ -495,18 +495,22 @@ export function LivingFlowPilot({
         }
 
         const latestNodes = nodesRef.current;
-        const prepared = prepareAdditiveWorldExpansion(
-          latestNodes,
+        if (!mountedRef.current || handledContextExpansionRequestRef.current !== requestId) return;
+        const { snapshot, appended } = await savePersonContextExpansion(
+          worldRepositoryRef.current!,
+          { worldId: worldIdRef.current, worldRevision: worldRevisionRef.current, nodeIds: latestNodes.map((node) => node.id) },
           payload.nodes,
-          nodeStatesRef.current,
-          explorationBandsRef.current,
           band,
+          requestedRevision,
         );
-        const { appended, nodes: allNodes, nodeStates: nextStates, explorationBands: bands } = prepared;
-        if (appended.length !== WORLD_EXPANSION_BATCH_SIZE) throw new Error(t('error.duplicateWorld'));
+        const allNodes = snapshot.nodes;
+        const nextStates = snapshot.nodeStates;
+        const bands = snapshot.explorationBands;
         const nextPlacement = computeSemanticLayout(allNodes, personStateRef.current, tiersFromStates(nextStates), bands);
+        const focus = cameraForPersonContextExpansion(nextPlacement, appended.map((node) => node.id));
         if (!mountedRef.current || handledContextExpansionRequestRef.current !== requestId) return;
 
+        worldRevisionRef.current = snapshot.worldRevision;
         worldIntegratedContextRevisionRef.current = requestedRevision;
         nodesRef.current = allNodes;
         nodeStatesRef.current = nextStates;
@@ -514,11 +518,14 @@ export function LivingFlowPilot({
         if (band > explorationBandRef.current) explorationBandRef.current = band;
         requestedBandsRef.current.add(band);
         placementRef.current = nextPlacement;
+        skipNextHydratedPersistenceRef.current = true;
+        notifyWorldPersisted(snapshot);
         setNodes(allNodes);
         commitNodeStates(nextStates);
         setExplorationBands(bands);
         setExplorationBand(explorationBandRef.current);
         setPlacement(nextPlacement);
+        setCameraRestore(focus);
         setLayoutUpdate(null);
         setSpatialSnapshot([]);
         setBatchHistory((current) => [...current, {
