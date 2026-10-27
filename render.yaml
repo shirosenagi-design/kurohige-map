@@ -1,5 +1,5 @@
 # Configuration only. Creating/syncing this Blueprint provisions paid resources.
-# Live AI remains OFF until separate approval, credentials, and guard configuration.
+# Live AI remains OFF until separate approval and credentials.
 services:
   - type: web
     name: kurohige-public-sample
@@ -47,8 +47,6 @@ services:
         value: 'false'
       - key: KUROHIGE_LIVE_SESSION
         value: filming
-      - key: NEBIUS_PRODUCT_GUARD_CONFIG_PATH
-        value: /etc/secrets/approved-filming-guard.json
       - key: KUROHIGE_LIVE_AI_TRUSTED_PROXY_SECRET
         generateValue: true
       - key: KUROHIGE_LIVE_AI_USERNAME
@@ -108,8 +106,6 @@ services:
         value: 'false'
       - key: KUROHIGE_LIVE_SESSION
         value: reviewer
-      - key: NEBIUS_PRODUCT_GUARD_CONFIG_PATH
-        value: /etc/secrets/approved-reviewer-guard.json
       - key: KUROHIGE_LIVE_AI_TRUSTED_PROXY_SECRET
         generateValue: true
       - key: KUROHIGE_LIVE_AI_USERNAME

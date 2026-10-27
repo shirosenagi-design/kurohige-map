@@ -44,7 +44,7 @@ async function guardFixture(options = {}) {
   return guard;
 }
 
-test('real Token Factory access fails closed when no persistent spend guard is supplied', async () => {
+test('the separate initial-six runner can explicitly require its persistent spend guard', async () => {
   let sends = 0;
   const guarded = createGuardedNebiusFetch({
     enabled: true,

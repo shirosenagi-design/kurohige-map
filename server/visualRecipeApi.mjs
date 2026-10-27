@@ -517,15 +517,14 @@ function isStructuredOutputCapabilityError(error) {
   return message.includes('response_format') || message.includes('json_schema') || message.includes('structured output');
 }
 
-export function createVisualRecipeService({ apiKey, apiEnabled = false, fetchImpl = fetch, spendGuard = null }) {
+export function createVisualRecipeService({ apiKey, apiEnabled = false, fetchImpl = fetch }) {
   let modelPromise = null;
   const pausedError = () => new PublicApiError(503, NEBIUS_API_PAUSED_CODE, NEBIUS_API_PAUSED_MESSAGE);
-  const guardFor = (operation) => spendGuard?.forOperation ? spendGuard.forOperation(operation) : spendGuard;
-  const guardedFetchFor = (operation) => createGuardedNebiusFetch({ enabled: apiEnabled, fetchImpl, errorFactory: pausedError, spendGuard: guardFor(operation) });
+  const guardedFetch = createGuardedNebiusFetch({ enabled: apiEnabled, fetchImpl, errorFactory: pausedError });
   const discoverModel = () => {
     assertNebiusApiEnabled(apiEnabled, pausedError);
     if (!apiKey) throw new PublicApiError(503, 'missing_nebius_api_key', 'NEBIUS_API_KEY is not configured on the server.');
-    modelPromise ??= nebiusRequest(guardedFetchFor('model_discovery'), apiKey, '/models').then((payload) => findNemotronUltra(payload?.data ?? []));
+    modelPromise ??= nebiusRequest(guardedFetch, apiKey, '/models').then((payload) => findNemotronUltra(payload?.data ?? []));
     return modelPromise;
   };
 
@@ -553,7 +552,7 @@ export function createVisualRecipeService({ apiKey, apiEnabled = false, fetchImp
       diagnostic.attempts.push(attempt);
       const attemptStartedAt = performance.now();
       try {
-        const payload = await nebiusRequest(guardedFetchFor('visual_recipe'), apiKey, '/chat/completions', {
+        const payload = await nebiusRequest(guardedFetch, apiKey, '/chat/completions', {
           method: 'POST',
           body: JSON.stringify(completionBody(model, goal, responseFormat, thinkingOffProbe, activeSystemPrompt)),
         }, attempt);
@@ -645,7 +644,7 @@ export function createVisualRecipeService({ apiKey, apiEnabled = false, fetchImp
         stageDiagnostic.attempts.push(attempt);
         const attemptStartedAt = performance.now();
         try {
-          const payload = await nebiusRequest(guardedFetchFor(operation), apiKey, '/chat/completions', {
+          const payload = await nebiusRequest(guardedFetch, apiKey, '/chat/completions', {
             method: 'POST', body: JSON.stringify(body()),
           }, attempt);
           const parsed = parse(payload, attempt);
@@ -720,8 +719,8 @@ export function createVisualRecipeService({ apiKey, apiEnabled = false, fetchImp
   return { discoverModel, generate, generateTwoStage };
 }
 
-export function createVisualRecipeMiddleware({ apiKey, apiEnabled = false, fetchImpl = fetch, diagnosticEnabled = false, spendGuard = null }) {
-  const service = createVisualRecipeService({ apiKey, apiEnabled, fetchImpl, spendGuard });
+export function createVisualRecipeMiddleware({ apiKey, apiEnabled = false, fetchImpl = fetch, diagnosticEnabled = false }) {
+  const service = createVisualRecipeService({ apiKey, apiEnabled, fetchImpl });
   return async (req, res) => {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');

@@ -1330,13 +1330,12 @@ function assertSameOriginRead(req, productionMode = false) {
   }
 }
 
-export function createNebiusReviewModerator({ apiKey, apiEnabled = false, fetchImpl = fetch, spendGuard = null } = {}) {
+export function createNebiusReviewModerator({ apiKey, apiEnabled = false, fetchImpl = fetch } = {}) {
   const enabled = isNebiusApiEnabled(apiEnabled);
-  const guardFor = (operation) => spendGuard?.forOperation ? spendGuard.forOperation(operation) : spendGuard;
-  const guardedFetchFor = (operation) => createGuardedNebiusFetch({ enabled, fetchImpl, spendGuard: guardFor(operation) });
+  const guardedFetch = createGuardedNebiusFetch({ enabled, fetchImpl });
   let modelPromise = null;
   const discoverModel = async () => {
-    modelPromise ??= guardedFetchFor('model_discovery')(`${NEBIUS_BASE_URL}/models`, { headers: { Authorization: `Bearer ${apiKey}` } })
+    modelPromise ??= guardedFetch(`${NEBIUS_BASE_URL}/models`, { headers: { Authorization: `Bearer ${apiKey}` } })
       .then(async (response) => {
         if (!response.ok) throw new Error(`Model discovery failed (${response.status}).`);
         const payload = await response.json();
@@ -1352,7 +1351,7 @@ export function createNebiusReviewModerator({ apiKey, apiEnabled = false, fetchI
     async moderate(review) {
       if (!enabled || !apiKey) return { outcome: 'paused' };
       const model = await discoverModel();
-      const response = await guardedFetchFor('review_moderation')(`${NEBIUS_BASE_URL}/chat/completions`, {
+      const response = await guardedFetch(`${NEBIUS_BASE_URL}/chat/completions`, {
         method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model,
@@ -1392,13 +1391,12 @@ export function createNebiusReviewModerator({ apiKey, apiEnabled = false, fetchI
   };
 }
 
-export function createNebiusExperienceResolver({ apiKey, apiEnabled = false, fetchImpl = fetch, spendGuard = null } = {}) {
+export function createNebiusExperienceResolver({ apiKey, apiEnabled = false, fetchImpl = fetch } = {}) {
   const enabled = isNebiusApiEnabled(apiEnabled);
-  const guardFor = (operation) => spendGuard?.forOperation ? spendGuard.forOperation(operation) : spendGuard;
-  const guardedFetchFor = (operation) => createGuardedNebiusFetch({ enabled, fetchImpl, spendGuard: guardFor(operation) });
+  const guardedFetch = createGuardedNebiusFetch({ enabled, fetchImpl });
   let modelPromise = null;
   const discoverModel = async () => {
-    modelPromise ??= guardedFetchFor('model_discovery')(`${NEBIUS_BASE_URL}/models`, { headers: { Authorization: `Bearer ${apiKey}` } })
+    modelPromise ??= guardedFetch(`${NEBIUS_BASE_URL}/models`, { headers: { Authorization: `Bearer ${apiKey}` } })
       .then(async (response) => {
         if (!response.ok) throw new Error(`Model discovery failed (${response.status}).`);
         const payload = await response.json();
@@ -1414,7 +1412,7 @@ export function createNebiusExperienceResolver({ apiKey, apiEnabled = false, fet
     async extractIdentity(candidate) {
       if (!enabled || !apiKey) return { outcome: 'paused' };
       const model = await discoverModel();
-      const response = await guardedFetchFor('experience_identity')(`${NEBIUS_BASE_URL}/chat/completions`, {
+      const response = await guardedFetch(`${NEBIUS_BASE_URL}/chat/completions`, {
         method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model,
@@ -1457,7 +1455,7 @@ export function createNebiusExperienceResolver({ apiKey, apiEnabled = false, fet
           qualifiers: subject.identity.qualifiers ?? [], purpose: subject.identity.purpose ?? '', constraints: subject.identity.constraints ?? [],
         } : null,
       }));
-      const response = await guardedFetchFor('experience_resolution')(`${NEBIUS_BASE_URL}/chat/completions`, {
+      const response = await guardedFetch(`${NEBIUS_BASE_URL}/chat/completions`, {
         method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model,
@@ -1509,7 +1507,6 @@ export function createReviewLabApi({
   repository: suppliedRepository,
   sessionSecret = '', adminToken = '', developmentAuthEnabled = false,
   productionMode = false, apiKey = '', apiEnabled = false, fetchImpl = fetch,
-  spendGuard = null,
   moderator: suppliedModerator, experienceResolver: suppliedExperienceResolver,
   emailDelivery: suppliedEmailDelivery, authPublicBaseUrl = process.env.AUTH_PUBLIC_BASE_URL ?? '',
   passkey: passkeyOptions = {},
@@ -1519,8 +1516,8 @@ export function createReviewLabApi({
   const repository = suppliedRepository ?? createReviewLabRepository(storagePath);
   const sessionStore = repository.sessionStore ?? null;
   const secret = sessionSecret || (!productionMode ? DEVELOPMENT_SESSION_SECRET : '');
-  const moderator = suppliedModerator ?? createNebiusReviewModerator({ apiKey, apiEnabled, fetchImpl, spendGuard });
-  const experienceResolver = suppliedExperienceResolver ?? createNebiusExperienceResolver({ apiKey, apiEnabled, fetchImpl, spendGuard });
+  const moderator = suppliedModerator ?? createNebiusReviewModerator({ apiKey, apiEnabled, fetchImpl });
+  const experienceResolver = suppliedExperienceResolver ?? createNebiusExperienceResolver({ apiKey, apiEnabled, fetchImpl });
   const emailDelivery = suppliedEmailDelivery ?? createUnavailableEmailDelivery();
   const passkey = createPasskeyService(passkeyOptions);
   const syncRateLimit = {

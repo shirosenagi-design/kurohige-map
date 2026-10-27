@@ -1,14 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { Readable } from 'node:stream';
 import { createLivingFlowApi } from '../server/livingFlowApi.mjs';
-import {
-  createNebiusProductSpendGuard,
-  NEBIUS_PRODUCT_OPERATION_SCOPES,
-} from '../server/nebiusProductSpendGuard.mjs';
 import {
   appendDistinctPossibilityNodes,
   nearDuplicatePossibilityTitle,
@@ -21,10 +14,6 @@ import {
 } from '../src/worldCapacity.ts';
 
 const MODEL_ID = 'nvidia/Nemotron-3-Ultra-550b-a55b';
-const WORLD_OPERATIONS = Object.keys(NEBIUS_PRODUCT_OPERATION_SCOPES)
-  .filter((operation) => NEBIUS_PRODUCT_OPERATION_SCOPES[operation] === 'world');
-const REVIEW_OPERATIONS = Object.keys(NEBIUS_PRODUCT_OPERATION_SCOPES)
-  .filter((operation) => NEBIUS_PRODUCT_OPERATION_SCOPES[operation] === 'review');
 
 const domains = [
   '記憶とことば', '生態と環境', '農と食', '移動と案内', '学び合い', '音楽と舞台',
@@ -197,33 +186,12 @@ const summaryOf = (node) => ({
 });
 
 test('normal Product mock E2E reaches 120 through frontier expansion and appends Person Context changes safely', async () => {
-  const root = await mkdtemp(path.join(tmpdir(), 'kurohige-world-120-'));
-  const now = Date.now();
-  const guard = createNebiusProductSpendGuard({
-    schemaVersion: 1,
-    runId: `product-world-120-${path.basename(root)}`,
-    approvalId: `mock-approval-${path.basename(root)}`,
-    ledgerPath: path.join(root, 'product-ledger.jsonl'),
-    validFrom: new Date(now - 60_000).toISOString(),
-    validUntil: new Date(now + 60 * 60_000).toISOString(),
-    maxTotalChatPosts: 180,
-    maxModelDiscoveryRequests: 1,
-    maxTotalEstimatedUsd: 100,
-    inputUsdPerMillion: 1,
-    outputUsdPerMillion: 3,
-    scopes: {
-      world: { maxChatPosts: 179, maxEstimatedUsd: 99, allowedOperations: WORLD_OPERATIONS },
-      review: { maxChatPosts: 1, maxEstimatedUsd: 1, allowedOperations: REVIEW_OPERATIONS },
-    },
-  });
-  await guard.initialize();
   const transport = createMockNebiusTransport();
   const api = createLivingFlowApi({
     apiKey: 'mock-key-never-sent',
     apiEnabled: true,
     fetchImpl: transport.fetchImpl,
     diagnosticEnabled: false,
-    spendGuard: guard,
   });
   const generationContext = {
     mode: 'person_map',
@@ -309,13 +277,9 @@ test('normal Product mock E2E reaches 120 through frontier expansion and appends
   assert.ok(new Set(nodes.map((node) => node.category)).size >= 20);
   assert.equal(new Set(nodes.map((node) => node.nodeKind)).size, nodeKinds.length);
 
-  const at120 = await guard.snapshot();
   const statsAt120 = transport.stats();
   assert.equal(statsAt120.modelDiscoveryRequests, 1);
   assert.equal(statsAt120.chatPosts, 162, '160 baseline posts plus candidate and Stage G recovery are expected');
-  assert.equal(at120.chatPostsCompleted, 162);
-  assert.equal(at120.scopes.world.chatPostsCompleted, 162);
-  assert.equal(at120.scopes.review.chatPostsCompleted, 0);
   assert.equal(statsAt120.candidateRecoveryInjected, true);
   assert.equal(statsAt120.stageGInjected, true);
   assert.ok(statsAt120.driftPrompts.some((prompt) => prompt.includes('Semantic drift zone 1')));
@@ -349,9 +313,7 @@ test('normal Product mock E2E reaches 120 through frontier expansion and appends
   assert.deepEqual(shipBefore, { x: 0, y: 310 });
   assert.deepEqual(trailBefore, [{ x: 0, y: 310, t: 1 }]);
 
-  const finalGuard = await guard.snapshot();
-  assert.equal(finalGuard.chatPostsCompleted, 170);
-  assert.equal(finalGuard.scopes.review.chatPostsCompleted, 0);
+  assert.equal(transport.stats().chatPosts, 170);
   assert.equal(contextPrepared.nodes.length, 126);
   console.log('[world-120-mock-evidence]', JSON.stringify({
     counts: countAfterEachExpansion,
@@ -360,15 +322,9 @@ test('normal Product mock E2E reaches 120 through frontier expansion and appends
     nodeKindsAtFrontier: new Set(nodesAt120.map((node) => node.nodeKind)).size,
     candidateRejectionsRecovered: statsAt120.candidateRecoveryInjected ? 1 : 0,
     stageGRetriesRecovered: statsAt120.stageGInjected ? 1 : 0,
-    chatPostsAt120: at120.chatPostsCompleted,
+    chatPostsAt120: statsAt120.chatPosts,
     baselineChatPostsAt120: 160,
-    estimatedInputTokensReservedAt120: at120.estimatedInputTokensReserved,
-    estimatedOutputTokensReservedAt120: at120.estimatedOutputTokensReserved,
-    estimatedUsdReservedAt120: at120.estimatedUsdReserved,
-    mockActualPromptTokensAt120: at120.actualPromptTokens,
-    mockActualCompletionTokensAt120: at120.actualCompletionTokens,
-    mockActualUsdAt120: at120.actualUsd,
     afterPersonContextNodeCount: contextPrepared.nodes.length,
-    finalChatPosts: finalGuard.chatPostsCompleted,
+    finalChatPosts: transport.stats().chatPosts,
   }));
 });

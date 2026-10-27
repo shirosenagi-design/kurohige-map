@@ -1,6 +1,5 @@
 import http from 'node:http';
 import { spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -67,11 +66,6 @@ async function main() {
     if (process.env.KUROHIGE_PUBLIC_SAMPLE_ONLY === 'true') throw new Error('Public sample cannot enable Nebius.');
     const session = process.env.KUROHIGE_LIVE_SESSION;
     if (!['filming', 'reviewer'].includes(session)) throw new Error('An approved live session is required.');
-    const configPath = process.env.NEBIUS_PRODUCT_GUARD_CONFIG_PATH;
-    if (!configPath?.startsWith('/etc/secrets/')) throw new Error('Approved guard configuration must be a Render secret file.');
-    const config = JSON.parse(await readFile(configPath, 'utf8'));
-    const ledgerRoot = `/var/data/kurohige/ledgers/${session}/`;
-    if (!path.resolve(config.ledgerPath ?? '').startsWith(ledgerRoot)) throw new Error('Live guard ledger must be on the session-specific persistent disk.');
   }
   let upstreamReady = false;
   const server = createRenderGateway({ upstreamPort, proxySecret, ready: () => upstreamReady && child.exitCode === null });

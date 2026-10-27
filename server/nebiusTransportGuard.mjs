@@ -252,7 +252,7 @@ export function createNebiusLiveSpendGuard({
   return { initialize, execute, complete, stop, snapshot, ledgerPath: absoluteLedgerPath, runId, mode };
 }
 
-export function createGuardedNebiusFetch({ enabled = false, fetchImpl = fetch, errorFactory = null, spendGuard = null, requireSpendGuard = fetchImpl === globalThis.fetch } = {}) {
+export function createGuardedNebiusFetch({ enabled = false, fetchImpl = fetch, errorFactory = null, spendGuard = null, requireSpendGuard = false } = {}) {
   return async (...args) => {
     assertNebiusApiEnabled(enabled, errorFactory);
     const classified = classifyNebiusRequest(args[0], args[1]);

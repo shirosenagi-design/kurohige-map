@@ -4,7 +4,6 @@ import { createLivingFlowApi } from './server/livingFlowApi.mjs';
 import { createLocalEmailDelivery, createReviewLabApi } from './server/reviewLabApi.mjs';
 import { assertPostgresReviewSchema, createPostgresPool, createPostgresReviewRepository } from './server/postgres/postgresReviewRepository.mjs';
 import { createPostgresAccountSyncRepository } from './server/postgres/postgresAccountSyncRepository.mjs';
-import { createNebiusProductSpendGuardFromEnv } from './server/nebiusProductSpendGuard.mjs';
 import { createPublicSampleApiGuard } from './server/publicSampleGuard.mjs';
 import { createLiveAiAccessGate } from './server/liveAiAccessGate.mjs';
 
@@ -14,31 +13,29 @@ const approvedRenderHosts = new Set([
   'kurohige-live-reviewer.onrender.com',
 ]);
 
-function visualRecipeApiPlugin(apiKey, apiEnabled, diagnosticEnabled, reviewLabEnabled, reviewOptions, reviewPool = null, spendGuard = null, publicSampleOnly = false, liveAiAccessGate = null) {
-  const livingFlowApi = createLivingFlowApi({ apiKey, apiEnabled, diagnosticEnabled, spendGuard });
+function visualRecipeApiPlugin(apiKey, apiEnabled, diagnosticEnabled, reviewLabEnabled, reviewOptions, reviewPool = null, publicSampleOnly = false, liveAiAccessGate = null) {
+  const livingFlowApi = createLivingFlowApi({ apiKey, apiEnabled, diagnosticEnabled });
   const reviewLabApi = createReviewLabApi({
     enabled: true,
     apiKey,
     apiEnabled,
     developmentAuthEnabled: reviewLabEnabled,
     productionMode: !reviewLabEnabled,
-    spendGuard,
     ...reviewOptions,
   });
   const install = (server) => {
     server.middlewares.use(createPublicSampleApiGuard({ sampleOnly: publicSampleOnly }));
     if (liveAiAccessGate) server.middlewares.use(liveAiAccessGate);
-    server.middlewares.use('/api/visual-recipe', createVisualRecipeMiddleware({ apiKey, apiEnabled, diagnosticEnabled, spendGuard }));
+    server.middlewares.use('/api/visual-recipe', createVisualRecipeMiddleware({ apiKey, apiEnabled, diagnosticEnabled }));
     server.middlewares.use('/api/possibility-map', livingFlowApi.possibilityMapMiddleware);
     server.middlewares.use('/api/node-steps', livingFlowApi.nodeStepsMiddleware);
     server.middlewares.use('/api/node-detail', livingFlowApi.nodeDetailMiddleware);
     server.middlewares.use('/api/world-expand', livingFlowApi.worldExpandMiddleware);
     server.middlewares.use('/api/reviews', reviewLabApi.middleware);
     if (reviewLabEnabled) server.middlewares.use('/api/review-lab', reviewLabApi.middleware);
-    if (!spendGuard || spendGuard.allowsOperation('review_moderation')) reviewLabApi.startJobs();
+    reviewLabApi.startJobs();
     server.httpServer?.once('close', () => {
       reviewLabApi.stopJobs();
-      if (spendGuard) void spendGuard.stop('server_closed').catch(() => {});
       if (reviewPool) void reviewPool.end();
     });
   };
@@ -61,7 +58,6 @@ export default defineConfig(async ({ command, mode }) => {
     productionMode: mode === 'production',
     trustedProxySecret: serverEnv.KUROHIGE_LIVE_AI_TRUSTED_PROXY_SECRET ?? '',
   });
-  const productSpendGuard = isBuild ? null : await createNebiusProductSpendGuardFromEnv(serverEnv);
   const publicSampleOnly = serverEnv.KUROHIGE_PUBLIC_SAMPLE_ONLY === 'true';
   const reviewBackend = serverEnv.REVIEW_STORAGE_BACKEND || 'json';
   let reviewPool = null;
@@ -108,7 +104,6 @@ export default defineConfig(async ({ command, mode }) => {
         },
       },
       reviewPool,
-      productSpendGuard,
       publicSampleOnly,
       liveAiAccessGate,
     )],
